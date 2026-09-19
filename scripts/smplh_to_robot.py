@@ -8,6 +8,7 @@ import numpy as np
 from general_motion_retargeting import GeneralMotionRetargeting as GMR
 from general_motion_retargeting import RobotMotionViewer
 from general_motion_retargeting.utils.smpl import load_smplh_file, get_smplh_data_offline_fast
+from general_motion_retargeting.utils.rotation import smooth_human_data_frames
 
 from rich import print
 
@@ -82,6 +83,18 @@ if __name__ == "__main__":
              "interpenetration in the exported motion (e.g. for RL reference data).",
     )
 
+    parser.add_argument(
+        "--smooth_window",
+        type=int,
+        default=0,
+        help="Moving-average-smooth the source human pose/position data over "
+             "this many frames before retargeting (0 disables; try 5-9). "
+             "Targets beat/aliasing bursts in noisy source reconstructions "
+             "(e.g. egocentric SLAM with no direct limb sensing) -- a "
+             "several-frame stretch where the rotation axis stays consistent "
+             "but magnitude alternates fast/slow every frame.",
+    )
+
     args = parser.parse_args()
 
     # Use local SMPL-H body models in assets folder
@@ -110,6 +123,9 @@ if __name__ == "__main__":
     # align fps
     tgt_fps = 30
     smplh_data_frames, aligned_fps = get_smplh_data_offline_fast(smplh_data, body_model, smplh_output, tgt_fps=tgt_fps)
+
+    if args.smooth_window > 0:
+        smplh_data_frames = smooth_human_data_frames(smplh_data_frames, window=args.smooth_window)
 
 
     # Initialize the retargeting system
