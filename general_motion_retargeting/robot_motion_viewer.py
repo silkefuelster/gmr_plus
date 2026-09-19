@@ -56,8 +56,9 @@ class RobotMotionViewer:
                 # video recording
                 record_video=False,
                 video_path=None,
-                video_width=640,
-                video_height=480,
+                video_width=1280,
+                video_height=960,
+                video_quality=8,
                 keyboard_callback=None,
                 ):
         
@@ -102,7 +103,7 @@ class RobotMotionViewer:
 
             if not os.path.exists(video_dir):
                 os.makedirs(video_dir)
-            self.mp4_writer = imageio.get_writer(self.video_path, fps=self.motion_fps)
+            self.mp4_writer = imageio.get_writer(self.video_path, fps=self.motion_fps, quality=video_quality)
             print(f"Recording video to {self.video_path}")
 
             # Initialize renderer for video recording
