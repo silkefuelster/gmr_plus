@@ -130,6 +130,8 @@ def main():
         model_path=str(smpl_model_path),
         gender="neutral",
         use_pca=False,
+        ext="npz",
+        num_betas=16,
     )
     console.print(f"  SMPL-H model loaded from {smpl_model_path}")
 

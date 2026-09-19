@@ -219,6 +219,8 @@ def load_smplh_file(smplh_file, smplh_body_model_path, fitted_shape_path=None):
         model_path=smplh_body_model_path,
         gender="neutral",  # AMASS uses neutral gender
         use_pca=False,
+        ext="npz",
+        num_betas=16,
     )
 
     # Reconstruct full poses array for get_joints_verts (N, 156)

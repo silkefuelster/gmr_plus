@@ -710,6 +710,8 @@ def compute_smpl_height(shape: np.ndarray, smplh_model_path: str) -> float:
         model_path=smplh_model_path,
         gender="neutral",
         use_pca=False,
+        ext="npz",
+        num_betas=16,
     )
 
     # T-pose
