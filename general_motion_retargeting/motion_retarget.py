@@ -6,6 +6,7 @@ import json
 from scipy.spatial.transform import Rotation as R
 from .params import ROBOT_XML_DICT, IK_CONFIG_DICT
 from .utils.shape_fitting import load_fitted_shape
+from .utils.rotation import swing_twist_decompose
 from rich import print
 from mink.tasks.equality_constraint_task import EqualityConstraintTask
 
@@ -123,6 +124,7 @@ class GeneralMotionRetargeting:
         self.use_ik_match_table2 = ik_config["use_ik_match_table2"]
         self.human_scale_table = ik_config["human_scale_table"]
         self.ground = ik_config["ground_height"] * np.array([0, 0, 1])
+        self.elbow_twist_correction = ik_config.get("elbow_twist_correction")
 
         self.max_iter = 10
 
@@ -213,6 +215,48 @@ class GeneralMotionRetargeting:
                 self.tasks2.append(task)
                 self.task_errors2[task] = []
 
+    def _apply_twist_correction(self, human_data, correction_config, parent_key, child_key):
+        """Strip long-axis twist out of a child joint's orientation target.
+
+        Applies to joint pairs where the robot's chain between parent and
+        child link is missing a rotational DOF the tracked human joint's
+        full ball rotation demands: G1's elbow is a single hinge, missing
+        the twist about the forearm's long axis (pronation/supination).
+        Tracking that rotation directly on the elbow link demands a DOF the
+        chain doesn't have there, so the solver "finds" it by perturbing the
+        shoulder instead -- a non-unique split between shoulder yaw and
+        elbow flexion that jitters frame to frame even though tracking error
+        stays low. The wrist's own 3-DOF chain further down still carries
+        the full absolute hand orientation, so dropping twist from the
+        elbow's target doesn't lose it.
+        """
+        if not correction_config:
+            return human_data
+
+        for side_cfg in correction_config.values():
+            parent_name = side_cfg[parent_key]
+            child_name = side_cfg[child_key]
+            if parent_name not in human_data or child_name not in human_data:
+                continue
+
+            twist_axis = np.array(side_cfg["twist_axis"], dtype=float)
+
+            parent_pos, parent_quat = human_data[parent_name]
+            child_pos, child_quat = human_data[child_name]
+
+            R_parent = R.from_quat(parent_quat, scalar_first=True)
+            R_child = R.from_quat(child_quat, scalar_first=True)
+
+            # Local child rotation relative to the parent, i.e. exactly the
+            # SMPL joint's own local pose rotation (human_data quats are
+            # cumulative products down the kinematic chain).
+            R_local = R_parent.inv() * R_child
+            swing, _twist = swing_twist_decompose(R_local, twist_axis)
+
+            human_data[child_name] = (child_pos, (R_parent * swing).as_quat(scalar_first=True))
+
+        return human_data
+
     def _resolve_offsets(self, body_name, default_pos, default_rot):
         if self.learned_offsets is not None:
             pos_offsets = self.learned_offsets.get("pos_offsets", {})
@@ -279,6 +323,9 @@ class GeneralMotionRetargeting:
         human_data = self.apply_ground_offset(human_data)
         if offset_to_ground:
             human_data = self.offset_human_data_to_ground(human_data)
+        human_data = self._apply_twist_correction(
+            human_data, self.elbow_twist_correction, "shoulder", "elbow"
+        )
         self.scaled_human_data = human_data
 
         if self.use_ik_match_table1:

@@ -24,6 +24,19 @@
         "right_wrist": 0.8
     },
 
+    "elbow_twist_correction": {
+        "left": {
+            "shoulder": "left_shoulder",
+            "elbow": "left_elbow",
+            "twist_axis": [1.0, 0.0, 0.0]
+        },
+        "right": {
+            "shoulder": "right_shoulder",
+            "elbow": "right_elbow",
+            "twist_axis": [-1.0, 0.0, 0.0]
+        }
+    },
+
     "ik_match_table1": {
         "pelvis": [
             "pelvis",
