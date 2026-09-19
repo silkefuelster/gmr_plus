@@ -111,3 +111,8 @@ GVHMR/
 batch_twist1_to_csv.py
 
 yaml_to_flat_csv.py
+
+uv.lock
+
+assets/fitted_shapes/*_shape_metadata.json
+assets/motion_sequences/*_args.yaml
