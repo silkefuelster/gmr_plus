@@ -25,6 +25,8 @@ class GeneralMotionRetargeting:
         use_velocity_limit: bool=False,
         use_fitted_shape: bool=False,  # Whether using fitted shape
         fitted_shape_path: str=None,
+        enforce_floor_contact: bool = False,
+        floor_contact_geom_names: list = None,
     ) -> None:
 
         # load the robot model
@@ -145,12 +147,52 @@ class GeneralMotionRetargeting:
         self.ik_limits = [mink.ConfigurationLimit(self.model)]
         if use_velocity_limit:
             VELOCITY_LIMITS = {k: 3*np.pi for k in self.robot_motor_names.keys()}
-            self.ik_limits.append(mink.VelocityLimit(self.model, VELOCITY_LIMITS)) 
-            
+            self.ik_limits.append(mink.VelocityLimit(self.model, VELOCITY_LIMITS))
+
+        self.enforce_floor_contact = enforce_floor_contact
+        self.floor_contact_geom_ids = None
+        if enforce_floor_contact:
+            self.floor_contact_geom_ids = self._find_robot_collidable_geom_ids(
+                floor_contact_geom_names
+            )
+            if not self.floor_contact_geom_ids:
+                raise ValueError(
+                    "enforce_floor_contact=True but no collidable robot geoms were "
+                    "found (checked contype/conaffinity != 0). Pass "
+                    "floor_contact_geom_names explicitly."
+                )
+            if verbose:
+                print(f"[GMR] Floor contact enforcement: monitoring "
+                      f"{len(self.floor_contact_geom_ids)} robot geoms against "
+                      f"ground_height={ik_config['ground_height']}")
+
         self.setup_retarget_configuration()
-        
+
         self.ground_offset = 0.0
-    
+
+    def _find_robot_collidable_geom_ids(self, robot_geom_names=None):
+        """Return the robot's own collidable geoms (contype/conaffinity != 0).
+
+        These are the geoms whose true lowest point (via `model.geom_rbound`, a
+        conservative bounding-sphere radius MuJoCo computes for every geom
+        regardless of type) is checked against the floor by the post-solve
+        floor-contact correction. Defaults to every non-world geom with
+        collision enabled -- i.e. the robot's full physical collision mesh, not
+        just the feet -- since nothing on the robot should clip through the floor.
+        """
+        model = self.model
+        world_body_id = 0
+
+        if robot_geom_names is not None:
+            return [
+                mj.mj_name2id(model, mj.mjtObj.mjOBJ_GEOM, name) for name in robot_geom_names
+            ]
+        return [
+            gi for gi in range(model.ngeom)
+            if model.geom_bodyid[gi] != world_body_id
+            and (model.geom_contype[gi] != 0 or model.geom_conaffinity[gi] != 0)
+        ]
+
     def _add_equality_tasks(self, cur_task):
         model = self.configuration.model
 
@@ -419,7 +461,26 @@ class GeneralMotionRetargeting:
         body_diff = final_curr_pos - final_tgt_pos
         body_diff_norm = np.linalg.norm(body_diff, axis=1)
 
+        if self.enforce_floor_contact:
+            self._apply_floor_contact_correction()
+
         return self.configuration.data.qpos.copy(), body_diff_norm
+
+    def _apply_floor_contact_correction(self):
+        """Rigidly shift the root up if any collidable geom dips below the floor.
+        """
+        data = self.configuration.data
+        floor_z = self.ground[2]
+
+        lowest_z = min(
+            data.geom_xpos[gi][2] - self.model.geom_rbound[gi]
+            for gi in self.floor_contact_geom_ids
+        )
+        penetration = floor_z - lowest_z
+        if penetration > 0:
+            q = data.qpos.copy()
+            q[2] += penetration
+            self.configuration.update(q)
 
 
     def error1(self):

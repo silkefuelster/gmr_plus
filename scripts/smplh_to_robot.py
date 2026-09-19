@@ -66,6 +66,22 @@ if __name__ == "__main__":
         help="Path to fitted shape parameters (.pkl). Auto-detects if available for the robot.",
     )
 
+    parser.add_argument(
+        "--no_offset_to_ground",
+        default=False,
+        action="store_true",
+        help="Disable snapping the retargeted motion to the ground (on by default).",
+    )
+
+    parser.add_argument(
+        "--enforce_floor_contact",
+        default=False,
+        action="store_true",
+        help="After each frame's IK solve, rigidly shift the robot up if any "
+             "collision geom dips below the floor. Prevents foot/body "
+             "interpenetration in the exported motion (e.g. for RL reference data).",
+    )
+
     args = parser.parse_args()
 
     # Use local SMPL-H body models in assets folder
@@ -103,6 +119,7 @@ if __name__ == "__main__":
         tgt_robot=args.robot,
         use_fitted_shape=(fitted_shape_path is not None),
         fitted_shape_path=fitted_shape_path,
+        enforce_floor_contact=args.enforce_floor_contact,
     )
 
     robot_motion_viewer = RobotMotionViewer(robot_type=args.robot,
@@ -125,7 +142,7 @@ if __name__ == "__main__":
         qpos_list = []
 
     # Start the viewer
-    i = 0
+    i = -1
 
     while True:
         if args.loop:
@@ -148,7 +165,7 @@ if __name__ == "__main__":
         smplh_data = smplh_data_frames[i]
 
         # retarget
-        qpos, _ = retarget.retarget(smplh_data, offset_to_ground=False)
+        qpos, _ = retarget.retarget(smplh_data, offset_to_ground=not args.no_offset_to_ground)
 
         # visualize
         robot_motion_viewer.step(
