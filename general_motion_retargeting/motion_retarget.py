@@ -128,7 +128,14 @@ class GeneralMotionRetargeting:
         self.ground = ik_config["ground_height"] * np.array([0, 0, 1])
         self.elbow_twist_correction = ik_config.get("elbow_twist_correction")
 
-        self.max_iter = 10
+        # Large per-DOF task budget: the inner solve loop below already exits
+        # as soon as the error stops improving, so this only matters when a
+        # single frame needs to close a big gap (e.g. the very first frame,
+        # which starts from the robot's rest pose, or a discontinuity in the
+        # source motion). At 10 that gap wasn't closed in one frame -- it
+        # crept across several output frames and then jumped once IK finally
+        # caught up, which read as a "snap" at the start of every clip.
+        self.max_iter = 100
 
         self.solver = solver
         self.damping = damping
